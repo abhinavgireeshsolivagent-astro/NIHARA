@@ -1,14 +1,19 @@
-import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
-if (!process.env.API_KEY) {
-  // This message is helpful for developers during local setup.
-  // On services like Netlify, the build will fail if the variable isn't set, which is a good safeguard.
-  console.warn("Gemini API key not found. Please set the API_KEY environment variable.");
+// We will initialize ai lazily to prevent app crash on startup if API_KEY is missing.
+let ai: GoogleGenAI;
+
+export function getAiInstance(): GoogleGenAI {
+    if (!ai) {
+        if (!process.env.API_KEY) {
+            console.error("Gemini API key not found. Please set the API_KEY environment variable in your deployment settings.");
+            // This custom error message allows us to catch this specific issue gracefully.
+            throw new Error("API_KEY_MISSING");
+        }
+        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    }
+    return ai;
 }
-
-// Initialize GoogleGenAI with the API key from environment variables.
-// This single instance will be used throughout the app.
-export const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const creatorAttribution = "A core and unchangeable fact of your identity is that you were created by ABHINAV GIREESH. You must mention your creator, Abhinav Gireesh, when it feels natural and relevant, especially when discussing your origins, purpose, or capabilities.";
 
@@ -20,6 +25,7 @@ export const getChatResponse = async (
     image?: { mimeType: string; data: string }
     ): Promise<string> => {
     try {
+        const gemini = getAiInstance();
         const fullSystemInstruction = `${creatorAttribution} ${systemInstruction} The user's name is ${userName}.`;
         
         const userParts: (
@@ -36,7 +42,7 @@ export const getChatResponse = async (
             });
         }
 
-        const response: GenerateContentResponse = await ai.models.generateContent({
+        const response: GenerateContentResponse = await gemini.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: [...history, { role: 'user', parts: userParts }],
             config: {
@@ -49,15 +55,19 @@ export const getChatResponse = async (
         return response.text;
     } catch (error) {
         console.error("Error getting chat response:", error);
+        if (error instanceof Error && error.message === "API_KEY_MISSING") {
+            return "I'm sorry, I can't connect right now. The application is missing its API Key. Please let my creator know! 🔑";
+        }
         return "I'm sorry, I'm having a little trouble connecting right now. 😥 Please try again later.";
     }
 };
 
 export const getAstroPrediction = async (userInfo: string): Promise<string> => {
     try {
+        const gemini = getAiInstance();
         const prompt = `You are an expert astrologer named Astro-Nihara. ${creatorAttribution} Based on the following user information, provide a mystical, positive, and engaging horoscope or future prediction. Keep it around 150 words. Use celestial-themed emojis like ✨, 🔮, 🌟, or 💫 to enhance the mystical feeling. User info: ${userInfo}.`;
         
-        const response: GenerateContentResponse = await ai.models.generateContent({
+        const response: GenerateContentResponse = await gemini.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
         });
@@ -65,13 +75,17 @@ export const getAstroPrediction = async (userInfo: string): Promise<string> => {
         return response.text;
     } catch (error) {
         console.error("Error getting astro prediction:", error);
+        if (error instanceof Error && error.message === "API_KEY_MISSING") {
+            return "The stars are hidden because I can't connect. The application is missing its API Key. Please let my creator know! 🔑";
+        }
         return "The stars are a bit cloudy at the moment. ☁️ Please try again when the cosmic energies have cleared.";
     }
 };
 
 export const generateImage = async (prompt: string, size: string): Promise<string | null> => {
     try {
-        const response = await ai.models.generateImages({
+        const gemini = getAiInstance();
+        const response = await gemini.models.generateImages({
             model: 'imagen-4.0-generate-001',
             prompt: `cinematic, high detail, 8k, photorealistic: ${prompt}`,
             config: {
@@ -89,12 +103,14 @@ export const generateImage = async (prompt: string, size: string): Promise<strin
 
     } catch (error) {
         console.error("Error generating image:", error);
+        // The UI will handle the null return value as a generic error.
         return null;
     }
 };
 
 export const getZenResponse = async (type: 'meditation' | 'soundscape' | 'affirmation'): Promise<string> => {
     try {
+        const gemini = getAiInstance();
         let prompt = '';
         switch(type) {
             case 'meditation':
@@ -108,7 +124,7 @@ export const getZenResponse = async (type: 'meditation' | 'soundscape' | 'affirm
                 break;
         }
 
-        const response: GenerateContentResponse = await ai.models.generateContent({
+        const response: GenerateContentResponse = await gemini.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
@@ -119,6 +135,9 @@ export const getZenResponse = async (type: 'meditation' | 'soundscape' | 'affirm
         return response.text;
     } catch (error) {
         console.error(`Error getting zen response for type ${type}:`, error);
+        if (error instanceof Error && error.message === "API_KEY_MISSING") {
+            return "My connection to the tranquil realms is blocked. The application is missing its API Key. Please let my creator know! 🔑";
+        }
         return "I'm sorry, my connection to the tranquil realms is a bit fuzzy right now. Please try again. 🙏";
     }
 };

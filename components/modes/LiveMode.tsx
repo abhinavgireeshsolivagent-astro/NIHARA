@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 // Fix: Aliased Blob to GenAiBlob to resolve name collision with native Blob type.
 import { LiveServerMessage, Modality, Blob as GenAiBlob } from '@google/genai';
-import { ai } from '../../services/geminiService'; // Import the shared AI instance
+import { getAiInstance } from '../../services/geminiService'; // Use the new lazy-loading function
 import { Mic, PhoneOff, Loader2, AudioWaveform, Camera, CameraOff } from 'lucide-react';
 
 interface LiveModeProps {
@@ -158,17 +158,13 @@ const LiveMode: React.FC<LiveModeProps> = ({ userName, voiceTone, onInteraction,
 
     const startConversation = async () => {
         if (isActive || isConnecting) return;
-        
-        if (!process.env.API_KEY) {
-            setStatus("API Key not configured.");
-            return;
-        }
 
         setIsConnecting(true);
         setStatus('Initializing...');
         onInteraction();
         
         try {
+            const ai = getAiInstance();
             // Robustly create and resume AudioContexts to ensure they are active
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
             if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
@@ -285,7 +281,11 @@ const LiveMode: React.FC<LiveModeProps> = ({ userName, voiceTone, onInteraction,
 
         } catch (error) {
             console.error('Failed to start conversation:', error);
-            setStatus('Failed to start. Check mic permissions.');
+             if (error instanceof Error && error.message === 'API_KEY_MISSING') {
+                setStatus('Configuration Error: API key is missing.');
+            } else {
+                setStatus('Failed to start. Check mic permissions.');
+            }
             setIsConnecting(false);
             if (audioContextRef.current) audioContextRef.current.close();
             if (outputAudioContextRef.current) outputAudioContextRef.current.close();
